@@ -12,6 +12,7 @@ def create_kickoff(request: KickoffRequest) -> KickoffResponse:
         return generate_kickoff_draft(
             orien_outline_text=request.orien_outline_text,
             selected_axis_text=request.selected_axis_text,
+            customer_business_analysis=request.customer_business_analysis,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

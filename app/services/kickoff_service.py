@@ -31,9 +31,11 @@ def _strip_code_fence(text: str) -> str:
 def generate_kickoff_draft(
     orien_outline_text: str,
     selected_axis_text: str,
+    customer_business_analysis: str = "",
 ) -> KickoffResponse:
     orien_outline_text = (orien_outline_text or "").strip()
     selected_axis_text = (selected_axis_text or "").strip()
+    customer_business_analysis = (customer_business_analysis or "").strip()
 
     if not orien_outline_text:
         raise ValueError("orien_outline_text is required.")
@@ -41,9 +43,13 @@ def generate_kickoff_draft(
         raise ValueError("selected_axis_text is required.")
 
     prompt = f"""
-あなたは市場調査設計の専門家です。
-以下のオリエン内容の整理と、選択された課題視点をもとに、
+あなたは市場調査会社のシニアアナリストです。
+以下のオリエン内容、選択された課題視点、顧客事業分析をもとに、
 調査設計の初期段階で用いる「キックオフノート」を作成してください。
+
+今回のKONは、単なる調査背景の整理ではありません。
+顧客がなぜ今この調査を必要としているのか、
+どの事業判断に接続するのかが伝わるレベルまで、事業文脈を反映してください。
 
 【出力形式】
 必ず次のJSONオブジェクトのみを出力してください。
@@ -59,22 +65,36 @@ def generate_kickoff_draft(
   "ポイント": "..."
 }}
 
-【条件】
-- 各項目は80〜120字程度を目安に、簡潔かつ具体的に記述すること
-- オリエン内容にある固有名詞・背景・制約・文脈をできるだけ反映すること
-- 「選択された課題視点」を最優先の前提として全体を構成すること
-- 【目標】や【現状】は、市場調査で仮説検証可能な範囲に限定すること
-- 【問い】は、この案件で明らかにすべきリサーチクエスチョンとして書くこと
-- 【ポイント】には、なぜその構成にしたのか、注意点や補足を簡潔に書くこと
-- 抽象的すぎる表現は避けること
-- 不明な情報は勝手に補完しすぎず、与えられた情報の範囲で最善に構成すること
+【記述方針】
+- 各項目は120〜180字程度を目安に、以前より少し厚めに記述すること
+- 顧客事業分析がある場合は、必ずその内容を優先的に反映すること
+- 「目標」は単なるKPIではなく、事業として何を実現したいかを書くこと
+- 「現状」は単なる事実列挙ではなく、なぜそれが事業上問題なのかまで書くこと
+- 「ビジネス課題」は、売上・顧客接点・ブランド体験・競争優位・収益構造などの観点で書くこと
+- 「調査目的」は、調査で何を明らかにすれば意思決定できるのかを書くこと
+- 「問い」は、この案件で最も見極めるべきリサーチクエスチョンとして書くこと
+- 「仮説」は、顧客事業分析から読み取れる仮説を明示すること
+- 「ポイント」は、見落とすと危険な論点、または調査設計上の注意点を書くこと
+- 抽象的すぎる表現は避け、オリエン内容にある固有名詞・背景・制約・文脈を反映すること
+- 不明な外部事実は断定せず、「可能性」「仮説」として扱うこと
+
+【特に重視する観点】
+- 顧客事業が置かれている状況
+- 市場・顧客・競争の変化
+- 顧客が感じていそうな焦りや違和感
+- なぜ今この調査が必要なのか
+- 今回の意思決定で何を判断したいのか
+- 調査がどの事業判断に接続するのか
 
 【入力データ】
 ▼オリエン内容の整理
 {orien_outline_text[:4000]}
 
 ▼選択された課題視点（最優先で反映）
-{selected_axis_text[:2000]}
+{selected_axis_text[:3000]}
+
+▼顧客事業分析・事業仮説整理
+{customer_business_analysis[:6000] if customer_business_analysis else "未入力"}
 """.strip()
 
     response = client.chat.completions.create(

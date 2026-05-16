@@ -17,6 +17,8 @@ from app.api.ppt_export import router as ppt_export_router
 from app.api.excel_export import router as excel_export_router
 from app.api import proposal_review
 
+from app.api import customer_business_analysis
+
 app = FastAPI(title="Research Planning API")
 
 app.add_middleware(
@@ -49,6 +51,11 @@ app.include_router(research_items_router)
 app.include_router(ppt_export_router)
 app.include_router(excel_export_router)
 app.include_router(proposal_review.router, prefix="/api")
+app.include_router(
+    customer_business_analysis.router,
+    prefix="/api",
+    tags=["customer-business-analysis"],
+)
 
 @app.get("/")
 def root():

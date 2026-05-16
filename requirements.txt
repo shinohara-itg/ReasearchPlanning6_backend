@@ -9,3 +9,4 @@ openpyxl
 python-pptx
 python-docx
 PyMuPDF
+requests

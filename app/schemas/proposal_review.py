@@ -13,8 +13,6 @@ class ProposalReviewRequest(BaseModel):
 
 
 class ProposalReviewResponse(BaseModel):
-    score: int
-    overall_comment: str
-    good_points: List[str]
-    concerns: List[str]
-    recommended_fixes: List[str]
+    decision_change: str
+    background_connection: str
+    actionable_suggestions: List[str]

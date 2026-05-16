@@ -1,9 +1,15 @@
+from typing import Optional
+
 from pydantic import BaseModel, Field
 
 
 class KickoffRequest(BaseModel):
     orien_outline_text: str = Field(..., min_length=1, description="オリエン整理済みテキスト")
     selected_axis_text: str = Field(..., min_length=1, description="選択した課題視点テキスト")
+    customer_business_analysis: Optional[str] = Field(
+        default="",
+        description="顧客事業分析・事業仮説整理テキスト",
+    )
 
 
 class KickoffResponse(BaseModel):
