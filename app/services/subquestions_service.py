@@ -16,7 +16,7 @@ client = AzureOpenAI(
 )
 
 DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
-MAX_SUBQUESTIONS = 9
+MAX_SUBQUESTIONS = 3
 
 
 def _strip_code_fence(text: str) -> str:
@@ -47,9 +47,11 @@ def _normalize_subq_list(items: list) -> List[SubQuestionItem]:
         cleaned.append(
             SubQuestionItem(
                 id=str(item.get("id") or f"SQ{i}").strip(),
+                chapter_role=str(item.get("chapter_role", "")).strip(),
                 subq=subq,
                 axis=str(item.get("axis", "")).strip(),
                 items=str(item.get("items", "")).strip(),
+                report_image=str(item.get("report_image", "")).strip(),
             )
         )
 
@@ -82,15 +84,19 @@ def generate_subquestions_draft(
         raise ValueError("main_question is required.")
 
     prompt = f"""
-あなたは市場調査設計の専門家です。
-キックオフノートの「メインクエスチョン」を起点に、
-それを分解するサブクエスチョン案を作成してください。
+あなたは市場調査設計とレポート構成設計の専門家です。
+キックオフノートの「メインクエスチョン」に答えるために、サブクエスチョンを設計してください。
 
 【最重要ルール】
-- サブクエスチョンは、必ず「メインクエスチョン」を直接分解したものにすること
+- サブクエスチョンは、単なる思いつきの問いを3つ並べるのではなく、構造化した設計にすること
+- SQ1 → SQ2 → SQ3 の順番に読むと、メインクエスチョンに答えるためのストーリーになること
+- 例：SQ1は「現状把握」、SQ2は「要因・背景分析」、SQ3は「判断・施策示唆」のような役割を持たせる
+- 3つのSQを並列の論点にしないこと
+- 各SQは、レポートの各章で何を明らかにするかが分かる問いにすること
 - 「選択された課題視点」と「オリエン内容」は、メインクエスチョンの意味を補足するためだけに使うこと
-- メインクエスチョンに含まれない論点を、「選択された課題視点」や「オリエン内容」から新たに追加してはいけない
+- メインクエスチョンに含まれない論点を、補助情報から無理に追加しないこと
 - メインクエスチョンが意味不明、短すぎる、または市場調査の問いとして成立しない場合は、必ず空配列 [] のみを返すこと
+
 
 【入力データ】
 ▼メインクエスチョン
@@ -105,17 +111,24 @@ def generate_subquestions_draft(
 【出力要件】
 - 出力は JSON 配列のみ
 - 前置き、説明文、コードブロック、Markdown記号は不要
-- 要素数は最大 {MAX_SUBQUESTIONS} 件
+- 要素数は必ず最大 {MAX_SUBQUESTIONS} 件
 - 各要素は必ず次のキーを持つこと
   - id
+  - chapter_role
   - subq
   - axis
   - items
 
-【条件】
-- subq はメインクエスチョンの分解になっていること
-- axis と items は空欄にしないこと
-- 1件ごとに独立した検証論点にすること
+
+【各キーの意味】
+- id：SQ1、SQ2、SQ3
+- chapter_role：そのSQがレポート上で担う役割。例：現状把握、要因・背景分析、判断・施策示唆
+- subq：章の中心となる問い
+- axis：axisは分析の切り口のことでターゲットの特性やブランドへの態度などが入ることが多いです。
+- items：調査票・集計で見るべき調査項目案
+
+
+]
 """.strip()
 
     response = client.chat.completions.create(

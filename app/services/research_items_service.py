@@ -47,6 +47,18 @@ QUESTION_TYPE_MAP = {
     "multi_grid": "multi_grid",
 }
 
+QUESTION_TYPE_DISPLAY_MAP = {
+    "single": "SA",
+    "multi": "MA",
+    "numeric": "数値",
+    "free_text": "FA",
+    "single_grid": "SA表",
+    "multi_grid": "MA表",
+}
+
+
+def to_question_type_display(value: str) -> str:
+    return QUESTION_TYPE_DISPLAY_MAP.get(str(value or "").strip(), value)
 
 def _normalize_question_type(value: str) -> QuestionType:
     if not value:
@@ -88,113 +100,6 @@ def _chunk_to_lines(text: str) -> List[str]:
     return [line.strip() for line in str(text or "").splitlines() if line.strip()]
 
 
-def _fallback_screening_items(target_condition_text: str) -> List[ScreeningResearchItem]:
-    base_questions = [
-        {
-            "question": "現在、このカテゴリの商品・サービスを利用していますか。",
-            "question_type": "single",
-            "choices_example": ["現在利用している", "以前利用していた", "利用したことはない"],
-        },
-        {
-            "question": "直近3か月以内にこのカテゴリの商品・サービスを購入・利用しましたか。",
-            "question_type": "single",
-            "choices_example": ["はい", "いいえ"],
-        },
-        {
-            "question": "このカテゴリの主要ブランドの中で認知しているものを教えてください。",
-            "question_type": "multi",
-            "choices_example": ["ブランドA", "ブランドB", "ブランドC", "どれも知らない"],
-        },
-        {
-            "question": "あなたの年代を教えてください。",
-            "question_type": "single",
-            "choices_example": ["20代", "30代", "40代", "50代以上"],
-        },
-        {
-            "question": "あなたの性別を教えてください。",
-            "question_type": "single",
-            "choices_example": ["男性", "女性", "その他", "回答しない"],
-        },
-        {
-            "question": "居住エリアを教えてください。",
-            "question_type": "single",
-            "choices_example": ["首都圏", "中京圏", "関西圏", "その他"],
-        },
-        {
-            "question": "このカテゴリへの関与度を教えてください。",
-            "question_type": "single",
-            "choices_example": ["非常に高い", "やや高い", "あまり高くない", "低い"],
-        },
-    ]
-
-    result: List[ScreeningResearchItem] = []
-    for i, q in enumerate(base_questions, start=1):
-        result.append(
-            ScreeningResearchItem(
-                id=f"scr-{i:03d}",
-                number=i,
-                question=q["question"],
-                question_type=_normalize_question_type(q["question_type"]),
-                choices_example=q["choices_example"],
-            )
-        )
-    return result
-
-
-def _fallback_analysis_items(
-    analysis_blocks: List[AnalysisBlockInput],
-    selected_analysis_ids: List[str],
-    min_analysis_questions: int,
-) -> List[AnalysisResearchItem]:
-    selected_blocks = [b for b in analysis_blocks if b.id in selected_analysis_ids]
-    if not selected_blocks:
-        selected_blocks = analysis_blocks
-
-    if not selected_blocks:
-        return []
-
-    templates = [
-        ("{subq}を把握するため、現状の認識・実態を教えてください。", "single", ["非常によく当てはまる", "やや当てはまる", "あまり当てはまらない", "まったく当てはまらない"]),
-        ("{subq}に関して、特に重視する点を教えてください。", "multi", ["価格", "品質", "使いやすさ", "ブランド信頼"]),
-        ("{subq}に関して、不満・障壁になっている点を教えてください。", "multi", ["情報不足", "価格が高い", "選びにくい", "魅力を感じない"]),
-        ("{subq}に関して、比較時に確認する情報を教えてください。", "multi", ["口コミ", "スペック比較", "価格比較", "利用者評価"]),
-        ("{subq}に関する評価を10点満点で教えてください。", "numeric", []),
-        ("{subq}について、あなたの考えに最も近いものを選んでください。", "single", ["非常にそう思う", "ややそう思う", "どちらともいえない", "そう思わない"]),
-    ]
-
-    results: List[AnalysisResearchItem] = []
-    counter = 1
-    block_index = 0
-
-    while len(results) < min_analysis_questions:
-        block = selected_blocks[block_index % len(selected_blocks)]
-        tpl = templates[len(results) % len(templates)]
-
-        question = tpl[0].format(subq=block.subq or "該当テーマ")
-        question_type = tpl[1]
-        choices = tpl[2]
-
-        results.append(
-            AnalysisResearchItem(
-                id=f"ana-{counter:03d}",
-                number=counter,
-                subq_id=block.id,
-                subq=block.subq,
-                source_analysis_id=block.id,
-                question=question,
-                question_type=_normalize_question_type(question_type),
-                choices_example=choices,
-                adoption_status="adopted",
-                score=float(max(1, 100 - counter)),
-                reason="初期生成で採用",
-            )
-        )
-        counter += 1
-        block_index += 1
-
-    return results
-
-
 def generate_screening_items_llm(
     orien_outline_text: str,
     target_condition_text: str,
@@ -222,6 +127,16 @@ def generate_screening_items_llm(
   - 「調査にご協力いただけますか？」
   - 「過去に市場調査に参加した際、回答に不備や問題を指摘されたことはありますか？」
 - あくまで、対象者条件に関係する属性・利用実態・購買経験・認知・関与度などの判定設問に限定する
+- question は質問文ではなく「調査項目名」として出力する
+- 「あなたは〜ですか」「〜をお答えください」「〜を教えてください」のような質問文は禁止
+- 項目名は10〜20文字程度の名詞句にする
+- 例：
+  - 「あなたのご存じブランドをすべてお答えください。」→「ブランド認知」
+  - 「購入時に重視する点を教えてください。」→「購入重視点」
+  - 「現在利用しているサービスを教えてください。」→「利用サービス」
+  - 「満足度を10点満点で教えてください。」→「総合満足度」
+- choices_example は必ず配列で返す
+- numeric の場合も choices_example は null ではなく空配列 [] にする
 
 # オリエン整理
 {orien_outline_text[:3000]}
@@ -251,11 +166,14 @@ def generate_screening_items_llm(
     )
 
     content = response.choices[0].message.content or ""
+    print("[research_items] screening raw content:", content[:2000])
     data = _safe_json_load(content)
     raw_items = data.get("screening_items", [])
 
     result: List[ScreeningResearchItem] = []
     for i, item in enumerate(raw_items, start=1):
+        choices_raw = item.get("choices_example") or []
+
         result.append(
             ScreeningResearchItem(
                 id=f"scr-{i:03d}",
@@ -263,10 +181,11 @@ def generate_screening_items_llm(
                 question=str(item.get("question", "")).strip(),
                 question_type=_normalize_question_type(item.get("question_type", "single")),
                 choices_example=_dedupe_keep_order(
-                    [str(x).strip() for x in item.get("choices_example", []) if str(x).strip()]
+                    [str(x).strip() for x in choices_raw if str(x).strip()]
                 ),
             )
         )
+
     return result
 
 
@@ -296,11 +215,10 @@ def generate_analysis_items_llm(
 
     prompt = f"""
 あなたは市場調査票設計の専門家です。
-以下の情報をもとに、分析用の調査項目を最低 {min_analysis_questions} 問生成してください。
+以下の情報をもとに、分析用の調査項目を生成してください。
 
 # 要件
 - 出力は JSON のみ
-- 必ず最低 {min_analysis_questions} 問
 - サブクエスチョンごとにバランスよく配分する
 - 各設問には以下を含める
   - subq_id
@@ -309,15 +227,35 @@ def generate_analysis_items_llm(
   - question
   - question_type
   - choices_example
-  - score
-  - reason
 - question_type は次のいずれか
-  ["single", "multi", "free_text", "numeric", "single_grid", "multi_grid"]
-- questionは質問文ではなく項目で表す。例：「あなたは次のサービスを知っていますか」の場合は、「サービス認知」とする。
-- 比較軸と使用設問の意図を反映する
-- 市場調査票として自然な日本語にする
+  ["single", "multi", "single_grid", "multi_grid"]
+- 自由記入（"free_text"）で生成した方がよいと思う項目は、回答仮説をプリコードした選択肢をセットしたmulti形式で提案してください。  
+- 数値項目（"numeric"）で生成した方がよいと思う項目は、回答をプリコード（10回未満、20回未満など）したsingle形式で提案してください。  
+- question は質問文ではなく「調査項目名」として出力する
+- 「あなたは〜ですか」「〜をお答えください」「〜を教えてください」のような質問文は禁止
+- 項目名は10〜20文字程度の名詞句にする
+- 例：
+  - 「あなたのご存じブランドをすべてお答えください。」→「ブランド認知」
+  - 「購入時に重視する点を教えてください。」→「購入重視点」
+  - 「現在利用しているサービスを教えてください。」→「利用サービス」
+  - 「満足度を10点満点で教えてください。」→「総合満足度」
+- 選択された分析アプローチの items は「使用設問案」であり、調査項目生成の重要項目とする
+- ただし、items は必須・中核項目の候補として扱い、approach / hypothesis / subq を踏まえて、分析に必要な周辺項目・比較項目・背景項目・阻害要因項目も追加する
+- 各 analysis_block につき、以下の比率を目安に調査項目を構成する
+  - 50〜60%：items に含まれる使用設問案を具体化した項目
+  - 40〜50%：subq / approach / hypothesis から発想を広げた補完項目
+- items にない項目を追加する場合も、必ずその analysis_block の subq と approach に紐づくものにする
+- 単なる一般的な設問や、分析目的と関係の薄い項目は追加しない
+- reason には、その項目が items 由来なのか、分析補完として追加したものなのかが分かるように記載する
+- approach と hypothesis は、items の優先順位や設問意図を補足するために使う
 - 重複を避ける
-- 初期状態では全件 adoption_status = "adopted" とみなす想定
+
+# 件数配分
+- analysis_itemsは、選択された analysis_block が3件の場合、analysis_blockとごに最低10件ずつ生成する
+- analysis_itemsは、選択された analysis_block が2件の場合、analysis_blockとごに最低15件ずつ生成する
+- analysis_itemsは、選択された analysis_block が1件の場合、analysis_blockに最低20件生成する
+
+
 
 # オリエン整理
 {orien_outline_text[:2500]}
@@ -341,8 +279,6 @@ def generate_analysis_items_llm(
       "question": "設問項目",
       "question_type": "single",
       "choices_example": ["A", "B", "C"],
-      "score": 95,
-      "reason": "主問いに直結するため"
     }}
   ]
 }}
@@ -358,11 +294,14 @@ def generate_analysis_items_llm(
     )
 
     content = response.choices[0].message.content or ""
+    print("[research_items] analysis raw content:", content[:2000])
     data = _safe_json_load(content)
     raw_items = data.get("analysis_items", [])
 
     results: List[AnalysisResearchItem] = []
     for i, item in enumerate(raw_items, start=1):
+        choices_raw = item.get("choices_example") or []
+
         results.append(
             AnalysisResearchItem(
                 id=f"ana-{i:03d}",
@@ -373,10 +312,10 @@ def generate_analysis_items_llm(
                 question=str(item.get("question", "")).strip(),
                 question_type=_normalize_question_type(item.get("question_type", "single")),
                 choices_example=_dedupe_keep_order(
-                    [str(x).strip() for x in item.get("choices_example", []) if str(x).strip()]
+                    [str(x).strip() for x in choices_raw if str(x).strip()]
                 ),
                 adoption_status="adopted",
-                score=float(item.get("score", 50)),
+                score=float(item.get("score") or 50),
                 reason=str(item.get("reason", "")).strip() or "初期生成",
             )
         )
@@ -393,36 +332,28 @@ def generate_research_items(
     selected_analysis_ids: List[str],
     min_analysis_questions: int,
 ) -> ResearchItemsGenerateResponse:
-    try:
-        screening_items = generate_screening_items_llm(
-            orien_outline_text=orien_outline_text,
-            target_condition_text=target_condition_text,
-        )
-        if not screening_items:
-            screening_items = _fallback_screening_items(target_condition_text)
-    except Exception:
-        screening_items = _fallback_screening_items(target_condition_text)
+    screening_items = generate_screening_items_llm(
+        orien_outline_text=orien_outline_text,
+        target_condition_text=target_condition_text,
+    )
 
-    try:
-        analysis_items = generate_analysis_items_llm(
-            orien_outline_text=orien_outline_text,
-            kickoff_text=kickoff_text,
-            subquestions_text=subquestions_text,
-            analysis_blocks=analysis_blocks,
-            selected_analysis_ids=selected_analysis_ids,
-            min_analysis_questions=min_analysis_questions,
+    if not screening_items:
+        raise ValueError(
+            "スクリーニング調査項目を生成できませんでした。target_condition_text やオリエン整理の内容を確認してください。"
         )
-        if len(analysis_items) < min_analysis_questions:
-            analysis_items = _fallback_analysis_items(
-                analysis_blocks=analysis_blocks,
-                selected_analysis_ids=selected_analysis_ids,
-                min_analysis_questions=min_analysis_questions,
-            )
-    except Exception:
-        analysis_items = _fallback_analysis_items(
-            analysis_blocks=analysis_blocks,
-            selected_analysis_ids=selected_analysis_ids,
-            min_analysis_questions=min_analysis_questions,
+
+    analysis_items = generate_analysis_items_llm(
+        orien_outline_text=orien_outline_text,
+        kickoff_text=kickoff_text,
+        subquestions_text=subquestions_text,
+        analysis_blocks=analysis_blocks,
+        selected_analysis_ids=selected_analysis_ids,
+        min_analysis_questions=min_analysis_questions,
+    )
+
+    if not analysis_items:
+        raise ValueError(
+            "本調査項目を生成できませんでした。分析アプローチ、SQ、KONの内容を確認してください。"
         )
 
     return ResearchItemsGenerateResponse(
