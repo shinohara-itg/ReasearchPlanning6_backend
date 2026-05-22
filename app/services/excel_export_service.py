@@ -67,7 +67,6 @@ def _write_screening_sheet(wb: Workbook, items: list[ExcelResearchItem]) -> None
         "設問項目",
         "設問タイプ",
         "選択肢例",
-        "用途",
     ]
     _apply_common_style(ws, "1セット目：スクリーニング調査用", headers)
 
@@ -75,9 +74,8 @@ def _write_screening_sheet(wb: Workbook, items: list[ExcelResearchItem]) -> None
         ws.append([
             item.number or idx,
             item.question,
-            item.question_type,
+            _question_type_display(item.question_type),
             _choices_to_text(item.choices_example),
-            item.section or "対象者判定用",
         ])
 
     max_row = max(ws.max_row, 2)
@@ -86,19 +84,27 @@ def _write_screening_sheet(wb: Workbook, items: list[ExcelResearchItem]) -> None
     ws.auto_filter.ref = f"A2:E{max_row}"
 
 
+def _question_type_display(value: str) -> str:
+    mapping = {
+        "single": "SA",
+        "multi": "MA",
+        "numeric": "数値",
+        "free_text": "FA",
+        "single_grid": "SA表",
+        "multi_grid": "MA表",
+    }
+    return mapping.get(str(value or "").strip(), value or "")
+
+
 def _write_analysis_sheet(wb: Workbook, items: list[ExcelResearchItem]) -> None:
     ws = wb.create_sheet("2_本調査用")
 
     headers = [
         "No.",
         "SQ_ID",
-        "サブクエスチョン",
         "設問項目",
         "設問タイプ",
         "選択肢例",
-        "採用状態",
-        "スコア",
-        "理由",
     ]
     _apply_common_style(ws, "2セット目：本調査用", headers)
 
@@ -111,20 +117,15 @@ def _write_analysis_sheet(wb: Workbook, items: list[ExcelResearchItem]) -> None:
         ws.append([
             item.number or idx,
             item.subq_id or "",
-            item.subq or "",
             item.question,
-            item.question_type,
+            _question_type_display(item.question_type),
             _choices_to_text(item.choices_example),
-            item.adoption_status or "adopted",
-            item.score,
-            item.reason or "",
         ])
 
     max_row = max(ws.max_row, 2)
     _style_body(ws, max_row, len(headers))
-    _set_widths(ws, [8, 14, 42, 42, 16, 42, 14, 10, 32])
-    ws.auto_filter.ref = f"A2:I{max_row}"
-
+    _set_widths(ws, [8, 14, 42, 16, 42])
+    ws.auto_filter.ref = f"A2:E{max_row}"
 
 def create_research_items_excel(
     screening_items: list[ExcelResearchItem],

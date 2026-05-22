@@ -4,9 +4,11 @@ from typing import List
 
 class SubQuestionItem(BaseModel):
     id: str = Field(..., description="サブクエスチョンID")
+    chapter_role: str = Field(default="", description="レポート章としての役割")
     subq: str = Field(..., description="サブクエスチョン本文")
     axis: str = Field(default="", description="分析軸案")
     items: str = Field(default="", description="評価項目案")
+
 
 
 class SubQuestionsRequest(BaseModel):
