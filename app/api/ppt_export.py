@@ -43,6 +43,8 @@ async def export_ppt_api(
         ppt_stream, report = export_ppt_from_template_bytes(
             template_bytes=template_bytes,
             items=payload.items,
+            tables=payload.tables,
+            payload=payload_dict,
         )
 
         title = payload.meta.get("research_title") or payload.meta.get("project_name") or "企画書"
